@@ -455,6 +455,15 @@ input[type=range]::-webkit-slider-thumb {
 /* Page sections */
 .page { display: none; }
 .page.active { display: block; }
+
+/* Weekly Nutrition Styles */
+.weekly-nav { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; margin-bottom: 15px; scrollbar-width: none; }
+.day-pill { 
+  background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+  padding: 8px 16px; border-radius: 20px; font-size: 12px; cursor: pointer; white-space: nowrap;
+  transition: all 0.2s;
+}
+.day-pill.active { background: var(--lime-dim); border-color: var(--lime); color: var(--lime); }
 </style>
 </head>
 <body>
@@ -750,7 +759,10 @@ input[type=range]::-webkit-slider-thumb {
   <div id="page-nutrition" class="page">
     <div class="dash-section">
       <div class="sec-label">Plan de alimentación diario</div>
-      <div class="nutrition-card" id="d-meals"></div>
+      <div class="weekly-nav" id="d-weekly-nav"></div>
+      <div id="d-meals-container">
+        <div class="nutrition-card" id="d-meals"></div>
+      </div>
       <div class="sec-label" style="margin-top:18px;">Distribución de macros</div>
       <div class="chart-card"><h3>Macronutrientes objetivo</h3><canvas id="macroChart" height="180"></canvas></div>
       <div class="sec-label" style="margin-top:18px;">Batido recomendado</div>
@@ -797,6 +809,7 @@ let selectedSoma = null;
 let selectedGoal = null;
 let wChart = null, mChart = null;
 let calendarData = {};
+let currentNutritionDay = 0;
 
 // ──────────────────────────────────────────────────────
 //  NAVIGATION
@@ -836,9 +849,21 @@ window.addEventListener('load', () => {
   });
   try {
     const saved = localStorage.getItem('fp_user_v2');
-    if (saved) { U = JSON.parse(saved); buildDash(); goScreen('s-dash'); }
+    if (saved) { 
+      U = JSON.parse(saved); 
+      if(U.calendarData) calendarData = U.calendarData;
+      if(U.reminderTime) document.getElementById('f-remind-time').value = U.reminderTime;
+      buildDash(); 
+      goScreen('s-dash'); 
+      startReminderCheck();
+    }
   } catch(e) {}
 });
+
+function saveU() {
+  U.calendarData = calendarData;
+  localStorage.setItem('fp_user_v2', JSON.stringify(U));
+}
 
 // ──────────────────────────────────────────────────────
 //  ONBOARDING STEPS
@@ -888,7 +913,7 @@ function finishOnboarding() {
   U.sleepTarget = +document.getElementById('f-sleep').value;
   U.trainDays   = +document.getElementById('f-days').value;
   calcMetrics();
-  try { localStorage.setItem('fp_user_v2', JSON.stringify(U)); } catch(e) {}
+  saveU();
   buildDash();
   goScreen('s-dash');
 }
@@ -989,6 +1014,8 @@ function buildDash() {
     <div class="target-item"><div class="ti-icon ti-r">🏋️</div><div class="ti-info"><div class="ti-label">Días de entrenamiento</div><div class="ti-sub">Por semana</div></div><div class="ti-val">${u.trainDays} días</div></div>
   `;
 
+  if(u.reminderTime) document.getElementById('f-remind-time').value = u.reminderTime;
+
   buildRoutine();
   buildNutrition();
   buildCalendar();
@@ -1006,7 +1033,7 @@ function filterGoal(goal, btn) {
   // Update display
   U.goal = goal;
   calcMetrics();
-  try { localStorage.setItem('fp_user_v2', JSON.stringify(U)); } catch(e) {}
+  saveU();
   document.getElementById('d-goal-badge').textContent = GOAL_LABELS[goal];
   document.getElementById('d-tdee').textContent = U.tdee.toLocaleString();
   document.getElementById('d-protein').textContent = U.protein;
@@ -1118,10 +1145,18 @@ function getRoutine(goal, soma, days) {
 // ──────────────────────────────────────────────────────
 //  NUTRITION
 // ──────────────────────────────────────────────────────
+const SEMANA = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+
 function buildNutrition() {
+  let navHtml = '';
+  SEMANA.forEach((dia, idx) => {
+    navHtml += `<div class="day-pill ${idx === currentNutritionDay ? 'active' : ''}" onclick="changeNutritionDay(${idx})">${dia}</div>`;
+  });
+  document.getElementById('d-weekly-nav').innerHTML = navHtml;
+
   const { goal, tdee, protein, carbs, fat } = U;
 
-  const plans = {
+  const basePlans = {
     loss: {
       meals:[
         {icon:'🌅',name:'Desayuno',kcal:Math.round(tdee*0.25), items:'Avena con proteína en polvo, arándanos\nClaras de huevo revueltas (3)\nCafé negro sin azúcar'},
@@ -1160,8 +1195,39 @@ function buildNutrition() {
     }
   };
 
-  const plan = plans[U.goal] || plans.maintain;
+  // Generar variaciones para la semana
+  const variations = [
+    { d: 'Lunes', p: 'Pollo / Arroz / Brócoli' },
+    { d: 'Martes', p: 'Pescado Blanco / Quinoa / Espárragos' },
+    { d: 'Miércoles', p: 'Carne Magra / Batata / Ensalada Mixta' },
+    { d: 'Jueves', p: 'Pavo / Pasta Integral / Calabacín' },
+    { d: 'Viernes', p: 'Salmón / Cuscús / Espinacas' },
+    { d: 'Sábado', p: 'Tofu o Pollo / Legumbres / Pimientos' },
+    { d: 'Domingo', p: 'Tortilla de Vegetales / Pan Integral / Aguacate' }
+  ];
+
+  const plan = JSON.parse(JSON.stringify(basePlans[U.goal] || basePlans.maintain));
+  
+  // Personalizar el almuerzo según el día seleccionado para mostrar variedad
+  plan.meals[1].items = `${variations[currentNutritionDay].p}\nPorción ajustada a ${plan.meals[1].kcal} kcal\nAgua o Infusión`;
+
+  renderMealPlan(plan, protein, carbs, fat);
+}
+
+function changeNutritionDay(idx) {
+  currentNutritionDay = idx;
+  buildNutrition();
+}
+
+function renderMealPlan(plan, protein, carbs, fat) {
   let html = '';
+  const { goal, tdee } = U;
+
+  // Badge de día
+  html += `<div style="margin-bottom:15px; font-weight:700; color:var(--lime); font-size:14px; text-transform:uppercase; letter-spacing:1px;">
+    📅 Menú para el ${SEMANA[currentNutritionDay]}
+  </div>`;
+
   plan.meals.forEach(m => {
     html += `<div class="meal">
       <div class="meal-head">
@@ -1179,14 +1245,14 @@ function buildNutrition() {
     <div class="md-box"><div class="md-val" style="color:#ff8c3c">${fat}g</div><div class="md-lbl">Grasas</div></div>
   </div>`;
 
-  document.getElementById('d-meals').innerHTML = html;
+   document.getElementById('d-meals').innerHTML = html;
 
-  // Shake
-  const sh = plan.shake;
-  document.getElementById('d-shake').innerHTML = `
-    <div class="shake-title">${sh.name}</div>
-    <div class="shake-sub">Batido personalizado para tu objetivo</div>
-    <div class="shake-items">${sh.items.map(i=>`<div class="shake-item">${i}</div>`).join('')}</div>
+   // Actualizar batido
+   const sh = plan.shake;
+   document.getElementById('d-shake').innerHTML = `
+     <div class="shake-title">${sh.name}</div>
+     <div class="shake-sub">Batido personalizado para tu objetivo</div>
+     <div class="shake-items">${sh.items.map(i=>`<div class="shake-item">${i}</div>`).join('')}</div>
   `;
 }
 
@@ -1278,7 +1344,40 @@ function toggleCalDay(key, el) {
   const idx = (cycle.indexOf(cur) + 1) % cycle.length;
   if (idx === 0) delete calendarData[key];
   else calendarData[key] = cycle[idx];
+  saveU();
   buildCalendar();
+}
+
+// ──────────────────────────────────────────────────────
+//  NOTIFICATIONS & REMINDERS
+// ──────────────────────────────────────────────────────
+function requestNotifications() {
+  if (!("Notification" in window)) { alert("Tu navegador no soporta notificaciones."); return; }
+  Notification.requestPermission().then(permission => {
+    const status = document.getElementById('notif-status');
+    if (permission === "granted") {
+      status.textContent = "✅ Notificaciones activadas";
+      new Notification("FitPro", { body: "¡Perfecto! Te avisaremos cuando sea hora de entrenar." });
+    } else {
+      status.textContent = "❌ Notificaciones bloqueadas";
+    }
+  });
+}
+
+function updateReminderTime() {
+  U.reminderTime = document.getElementById('f-remind-time').value;
+  saveU();
+}
+
+function startReminderCheck() {
+  setInterval(() => {
+    if (!U.reminderTime || Notification.permission !== "granted") return;
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    if (currentTime === U.reminderTime) {
+      new Notification("🏋️ ¡Hora de Entrenar!", { body: "Tu plan de hoy te espera. ¡No rompas la racha!", icon: "https://cdn-icons-png.flaticon.com/512/3043/3043206.png" });
+    }
+  }, 60000); // Check every minute
 }
 
 // ──────────────────────────────────────────────────────
