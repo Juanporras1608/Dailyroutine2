@@ -852,7 +852,6 @@ window.addEventListener('load', () => {
     if (saved) { 
       U = JSON.parse(saved); 
       if(U.calendarData) calendarData = U.calendarData;
-      if(U.reminderTime) document.getElementById('f-remind-time').value = U.reminderTime;
       buildDash(); 
       goScreen('s-dash'); 
       startReminderCheck();
@@ -1195,7 +1194,6 @@ function buildNutrition() {
     }
   };
 
-  // Generar variaciones para la semana
   const variations = [
     { d: 'Lunes', p: 'Pollo / Arroz / Brócoli' },
     { d: 'Martes', p: 'Pescado Blanco / Quinoa / Espárragos' },
@@ -1207,8 +1205,6 @@ function buildNutrition() {
   ];
 
   const plan = JSON.parse(JSON.stringify(basePlans[U.goal] || basePlans.maintain));
-  
-  // Personalizar el almuerzo según el día seleccionado para mostrar variedad
   plan.meals[1].items = `${variations[currentNutritionDay].p}\nPorción ajustada a ${plan.meals[1].kcal} kcal\nAgua o Infusión`;
 
   renderMealPlan(plan, protein, carbs, fat);
@@ -1221,10 +1217,7 @@ function changeNutritionDay(idx) {
 
 function renderMealPlan(plan, protein, carbs, fat) {
   let html = '';
-  const { goal, tdee } = U;
-
-  // Badge de día
-  html += `<div style="margin-bottom:15px; font-weight:700; color:var(--lime); font-size:14px; text-transform:uppercase; letter-spacing:1px;">
+  html += `<div style="margin-bottom:15px; font-weight:700; color:var(--lime); font-size:14px;">
     📅 Menú para el ${SEMANA[currentNutritionDay]}
   </div>`;
 
@@ -1245,14 +1238,14 @@ function renderMealPlan(plan, protein, carbs, fat) {
     <div class="md-box"><div class="md-val" style="color:#ff8c3c">${fat}g</div><div class="md-lbl">Grasas</div></div>
   </div>`;
 
-   document.getElementById('d-meals').innerHTML = html;
+  document.getElementById('d-meals').innerHTML = html;
 
-   // Actualizar batido
-   const sh = plan.shake;
-   document.getElementById('d-shake').innerHTML = `
-     <div class="shake-title">${sh.name}</div>
-     <div class="shake-sub">Batido personalizado para tu objetivo</div>
-     <div class="shake-items">${sh.items.map(i=>`<div class="shake-item">${i}</div>`).join('')}</div>
+  // Shake
+  const sh = plan.shake;
+  document.getElementById('d-shake').innerHTML = `
+    <div class="shake-title">${sh.name}</div>
+    <div class="shake-sub">Batido personalizado para tu objetivo</div>
+    <div class="shake-items">${sh.items.map(i=>`<div class="shake-item">${i}</div>`).join('')}</div>
   `;
 }
 
@@ -1357,7 +1350,7 @@ function requestNotifications() {
     const status = document.getElementById('notif-status');
     if (permission === "granted") {
       status.textContent = "✅ Notificaciones activadas";
-      new Notification("FitPro", { body: "¡Perfecto! Te avisaremos cuando sea hora de entrenar." });
+      new Notification("FitPro", { body: "¡Listo! Te avisaremos a la hora configurada." });
     } else {
       status.textContent = "❌ Notificaciones bloqueadas";
     }
@@ -1375,9 +1368,9 @@ function startReminderCheck() {
     const now = new Date();
     const currentTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     if (currentTime === U.reminderTime) {
-      new Notification("🏋️ ¡Hora de Entrenar!", { body: "Tu plan de hoy te espera. ¡No rompas la racha!", icon: "https://cdn-icons-png.flaticon.com/512/3043/3043206.png" });
+      new Notification("🏋️ ¡Hora de Entrenar!", { body: "Es momento de cumplir con tu rutina de hoy.", icon: "https://cdn-icons-png.flaticon.com/512/3043/3043206.png" });
     }
-  }, 60000); // Check every minute
+  }, 60000); 
 }
 
 // ──────────────────────────────────────────────────────
